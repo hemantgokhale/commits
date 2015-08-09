@@ -10,4 +10,6 @@ class CommitDetails {
     List<AffectedPath> paths
     Boolean mergeCommit
     List<String> parentCommits // populated only if this is a merge commit
+    String repo
+    String releaseDate
 }

@@ -1,10 +1,11 @@
 import java.nio.file.Paths
-import java.text.DecimalFormat
 import java.util.regex.Matcher
 
 final String workDir = '/Users/hgokhale/work'
 final List<String> releaseDates = ['150204', '150218', '150304', '150318', '150408', '150506', '150520', '150603', '150617', '150722', '150805']
-repos = ['turn', 'webapp', 'quest']
+// final List<String> releaseDates = [ '150506', '150520', '150603', '150617', '150722', '150805']
+final List<String> repoNames = ['turn', 'webapp', 'quest']
+
 interestingFolders = [
         "src/java/com/turn/platform" : "platform",
         "src/java/com/turn/quest" : "quest",
@@ -14,96 +15,53 @@ interestingFolders = [
         "webapp" : "webapp"]
 
 
-Map<String, Map<String, Integer>> byReleaseAndPath = [:]
-Map<String, Map<Date, Integer>> byReleaseAndDate = [:]
-
 /* Processing begins */
-releaseDates.each {String releaseDate ->
-
-    Map<String, Integer> byPath = [:]
-    Map<String, Integer> byDate = [:]
-    repos.each {String repoName ->
-        List<CommitDetails> commits = getCommits(workDir, repoName, releaseDate)
-        getLinesChangedByPath(commits).each {key, value ->
-            byPath[key] = (byPath[key] ?: 0) + value
-        }
-    }
-    byReleaseAndDate[releaseDate] = byDate
-    byReleaseAndPath[releaseDate] = byPath
-
-    List<String> paths = byPath.keySet().sort()
-    println "Release: $releaseDate"
-    print "Lines by path \t Total: ${numberFormatter.format(byPath.values().sum())} \t["
-    byPath.sort{ a, b -> b.value <=> a.value }.each{key, value ->
-        print "$key:${numberFormatter.format(value)} "
-    }
-    println "]"
-}
-
-printResults(byReleaseAndPath, byReleaseAndDate)
+List<CommitDetails> commits = getAllCommits(releaseDates, repoNames, workDir)
+printCommitCountByRepo(commits)
 
 /* Processing ends */
 
-void printResults(Map<String, Map<String, Integer>> byPath, Map<String, Map<Date, Integer>> byDate) {
-
-    DecimalFormat numberFormatter = new DecimalFormat("###,###,###")
-
-    // By Path
-
-    // Headers
-    printf ("%10s", "Release")
-    def folders = interestingFolders.values()
-    folders.each{ printf("%10s", it)}
-    println ""
-    byPath.each {releaseDate, linesByPath ->
-
+/**
+ * Print a table showing number of commits by release and repo
+ * @param commits is the complete list of commits
+ */
+void printCommitCountByRepo(List<CommitDetails> commits) {
+    Table commitsByRepo = new Table("Number of commits merged")
+    
+    commits.each {CommitDetails c ->
+        int currentValue = commitsByRepo.get(c.releaseDate, c.repo) ?: 0
+        commitsByRepo.set(c.releaseDate, c.repo, currentValue + 1)
     }
 
+    // Generate the totals
+    def rows = commitsByRepo.getRowIds()
+    def columns = commitsByRepo.getColumnIds() 
+    rows.each { rowId ->
+        int total = 0
+        columns.each {columnId ->
+            total += commitsByRepo.get(rowId, columnId)
+        }
+        commitsByRepo.set(rowId, "total", total)
+    }
+    println commitsByRepo.toString()
 }
 
-
-Map<String, Integer> getLinesChangedByPath(List<CommitDetails> commits) {
-
-    Map<String, Integer> byPath = [:]
-    repos.each {String repoName ->
-        getLinesChangedByPath(commits, repoName).each {key, value ->
-            byPath[key] = (byPath[key] ?: 0) + value
+/**
+ * Get a list of commits that came into a release branch after it was created.
+ * @param releaseDates is a list of releases we are interested in
+ * @param repoNames is the list of repos we are interested in
+ * @param workDir is the full path where the repos are located
+ * @return a list of commits
+ */
+List<CommitDetails> getAllCommits(List<String> releaseDates, List<String> repoNames, String workDir) {
+    List<CommitDetails> commits = []
+    releaseDates.each {String releaseDate ->
+        repoNames.each {String repoName ->
+            commits.addAll(getCommits(workDir, repoName, releaseDate))
         }
     }
+    commits
 }
-
-Map<String, Integer> getLinesChangedByPath(List<CommitDetails> commits, String repoName) {
-
-    String OTHER = '"other"'
-    Map<String, Integer> linesByPath = [:]
-    interestingFolders.each {String folder, String shortName -> linesByPath[shortName] = 0}
-    linesByPath[OTHER] = 0
-
-    commits.each { CommitDetails details ->
-        details.paths?.each {AffectedPath affectedPath ->
-            Boolean processed = false
-            if (repoName == "webapp" || repoName == "quest") {
-                linesByPath[repoName] = linesByPath[repoName] + affectedPath.linesAdded + affectedPath.linesDeleted
-                processed = true
-            } else {
-                interestingFolders.each {String folder, String shortName ->
-                    if (affectedPath.path.startsWith(folder)) {
-                        linesByPath[shortName] = linesByPath[shortName] + affectedPath.linesAdded + affectedPath.linesDeleted
-                        processed = true
-                        return
-                    }
-                }
-            }
-
-            if (!processed) {
-                linesByPath[OTHER] = linesByPath[OTHER] + affectedPath.linesAdded + affectedPath.linesDeleted
-            }
-        }
-    }
-
-    linesByPath
-}
-
 
 /**
  * Get a list of commits that came into a release branch after it was created
@@ -122,6 +80,9 @@ List<CommitDetails> getCommits(String workspaceDir, String repoName, String rele
     gitLog.split("(?m)^commit ").each {
         if (it) {
             CommitDetails details = parseCommitDetails(it)
+            details.repo = repoName
+            details.releaseDate = releaseDate
+            
             // Ignore commits by Alan and Vivian
             if (!details.author.contains("Alan Qian") && !details.author.contains("Vivian Zhang")) {
                 commits << details
@@ -131,6 +92,11 @@ List<CommitDetails> getCommits(String workspaceDir, String repoName, String rele
     commits
 }
 
+/**
+ * Parse the output of 'git log' and extract commit details
+ * @param logOutput is the output to be parsed
+ * @return a CommitDetails object
+ */
 CommitDetails parseCommitDetails(String logOutput) {
 
     CommitDetails details = new CommitDetails()

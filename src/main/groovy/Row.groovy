@@ -10,8 +10,11 @@ class Row {
      * @param rowId
      */
     Row(def rowId) {id = rowId}
+    
     Object get(def columnId) {data[columnId]}
+    
     void set(def columnId, def value) {data[columnId] = value != null ? value : "null"}
+    
     List<Column> getColumns() {
         List<Column> columns = []
         data.keySet().each {columnId ->
@@ -25,7 +28,11 @@ class Row {
         columns
     }
     
-    private int getValueWidth(def value) {
+    List<Object> getColumnIds() {
+        data.keySet() as List
+    }
+    
+    private static int getValueWidth(def value) {
         value.toString().size()
     }
 }

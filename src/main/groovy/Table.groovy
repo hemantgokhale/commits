@@ -35,15 +35,33 @@ class Table {
     }
 
     /**
+     * Get a list of row ids in this table. 
+     * @return a list of row ids. No duplicates.
+     */
+    List<Object> getRowIds() {
+        rows*.id
+    }
+    /**
+     * Get a list of column ids in this table. 
+     * @return a list of columns. No duplicates.
+     */
+    List<Object> getColumnIds() {
+        Set<Object> columns = [] as Set
+        rows.each { Row row ->
+            columns = columns + row.getColumnIds()
+        }
+        columns as List
+    }
+    /**
      * Get a list of columns for this table. This is computed dynamically based on the existing row data.
      * The width of a column is set to the maximum of all widths returned by each row for that column.
      * @return
      */
     private List<Column> getColumns() {
         List<Column> columns = []
-        rows.each {Row row ->
-            row.getColumns().each {Column column ->
-                Column existingColumn = columns.find {it.id == column.id}
+        rows.each { Row row ->
+            row.getColumns().each { Column column ->
+                Column existingColumn = columns.find { it.id == column.id }
                 if (existingColumn) {
                     existingColumn.width = existingColumn.width < column.width ? column.width : existingColumn.width
                 } else {
@@ -86,8 +104,8 @@ class Table {
             buffer << " " * INTER_COLUMN_SPACE
 
             // row data
-            columns.each {Column c ->
-                def value =  r.get(c.id)
+            columns.each { Column c ->
+                def value = r.get(c.id)
                 buffer << convertToString(value, c.width)
                 buffer << " " * INTER_COLUMN_SPACE
             }
@@ -116,7 +134,7 @@ class Table {
 
     private int getMaxRowNameWidth() {
         int width = 0
-        rows.each {Row row ->
+        rows.each { Row row ->
             if (row.id.size() > width) {
                 width = row.id.size()
             }
